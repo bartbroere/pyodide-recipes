@@ -14,7 +14,7 @@ from CDN via the Pyodide JS FFI.
  1 file changed, 135 insertions(+), 8 deletions(-)
 
 diff --git a/__init__.py b/__init__.py
-index b17e980..0000000 100644
+index b17e980..abc1234 100644
 --- a/__init__.py
 +++ b/__init__.py
 @@ -11,0 +12 @@ import contextlib

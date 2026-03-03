@@ -1,36 +1,19 @@
-From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
-From: Bart Broere <bart@broere.eu>
-Date: Mon, 02 Mar 2026 00:00:00 +0000
-Subject: [PATCH] Add Pyodide shim for onnxruntime using onnxruntime-web
-
-Replaces the native C extension InferenceSession with a Python shim
-that bridges onnxruntime-web via Pyodide's JavaScript FFI. This allows
-onnxruntime to work in browser environments (e.g. JupyterLite).
-
----
- onnxruntime/__init__.py | 143 +++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++-----------
- 1 file changed, 133 insertions(+), 10 deletions(-)
-
 diff --git a/onnxruntime/__init__.py b/onnxruntime/__init__.py
-index 0000000..0000000 100644
+index b17e980..0b66ef1 100644
 --- a/onnxruntime/__init__.py
 +++ b/onnxruntime/__init__.py
-@@ -9,6 +9,7 @@
+@@ -9,6 +9,7 @@ or the `Github project <https://github.com/microsoft/onnxruntime/>`_.
  """
-
+ 
  import contextlib
 +import sys
-
+ 
  __version__ = "1.24.2"
  __author__ = "Microsoft"
-@@ -74,27 +75,158 @@
-
- from onnxruntime.capi import onnxruntime_validation
-
--if import_capi_exception:
-+if import_capi_exception and sys.platform != "emscripten":
+@@ -77,15 +78,15 @@ from onnxruntime.capi import onnxruntime_validation
+ if import_capi_exception:
      raise import_capi_exception
-
+ 
 -from onnxruntime.capi.onnxruntime_inference_collection import (
 -    AdapterFormat,  # noqa: F401
 -    InferenceSession,  # noqa: F401
@@ -40,7 +23,6 @@ index 0000000..0000000 100644
 -    OrtValue,  # noqa: F401
 -    SparseTensor,  # noqa: F401
 -    copy_tensors,  # noqa: F401
--)
 +with contextlib.suppress(ImportError):
 +    from onnxruntime.capi.onnxruntime_inference_collection import (
 +        AdapterFormat,  # noqa: F401
@@ -50,13 +32,13 @@ index 0000000..0000000 100644
 +        OrtValue,  # noqa: F401
 +        SparseTensor,  # noqa: F401
 +        copy_tensors,  # noqa: F401
-+    )
-
+ )
+ 
  # TODO: thiagofc: Temporary experimental namespace for new PyTorch front-end
- try:  # noqa: SIM105
-     from . import experimental  # noqa: F401
- except ImportError:
+@@ -95,6 +96,139 @@ except ImportError:
      pass
+ 
+ 
 +
 +
 +if import_capi_exception:
@@ -189,7 +171,7 @@ index 0000000..0000000 100644
 +        def get_session_options(self):
 +            return None
 +
-
++
  package_name, version, cuda_version = onnxruntime_validation.get_package_name_and_version_info()
-
+ 
  if version:

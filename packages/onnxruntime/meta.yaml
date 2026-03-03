@@ -6,6 +6,25 @@ source:
   sha256: 45b4f68ffec95b2cc0dc96b2b413f69ace9a80a0e5400023c5ac61f73a7a3fdf
   patches:
     - patches/0001-Add-Pyodide-shim-using-onnxruntime-web.patch
+build:
+  script: |
+    # The zip extracts the onnxruntime package files flat into src_extract_dir.
+    # Restructure so setuptools can build a proper wheel:
+    #   - move all package files into an onnxruntime/ subdirectory
+    #   - create a pyproject.toml for the build backend
+    mkdir -p onnxruntime
+    find . -maxdepth 1 -mindepth 1 ! -name '.*' ! -name 'dist' ! -name 'onnxruntime' -exec mv {} onnxruntime/ \;
+    echo '[build-system]' > pyproject.toml
+    echo 'requires = ["setuptools"]' >> pyproject.toml
+    echo 'build-backend = "setuptools.build_meta"' >> pyproject.toml
+    echo '' >> pyproject.toml
+    echo '[project]' >> pyproject.toml
+    echo 'name = "onnxruntime"' >> pyproject.toml
+    echo 'version = "1.24.2"' >> pyproject.toml
+    echo 'requires-python = ">=3.9"' >> pyproject.toml
+    echo '' >> pyproject.toml
+    echo '[tool.setuptools.packages.find]' >> pyproject.toml
+    echo 'include = ["onnxruntime*"]' >> pyproject.toml
 requirements:
   run:
     - numpy

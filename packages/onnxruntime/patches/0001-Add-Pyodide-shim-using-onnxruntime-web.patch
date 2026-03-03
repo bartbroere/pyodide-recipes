@@ -1,5 +1,5 @@
 From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
-From: Bart Broere <bart@broere.eu>
+From: Bart Broere <mail@bartbroere.eu>
 Date: Mon, 02 Mar 2026 00:00:00 +0000
 Subject: [PATCH] Add Pyodide shim for onnxruntime using onnxruntime-web
 

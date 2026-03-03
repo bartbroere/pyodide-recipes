@@ -1,143 +1,183 @@
-diff --git a/onnxruntime/__init__.py b/onnxruntime/__init__.py
-index b17e980..e8a4257 100644
---- a/onnxruntime/__init__.py
-+++ b/onnxruntime/__init__.py
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: Bart Broere <bart@bartbroere.eu>
+Date: Mon, 03 Mar 2026 10:00:00 +0000
+Subject: [PATCH] Add Pyodide shim using onnxruntime-web
+
+On Emscripten/WebAssembly the native C extension cannot be loaded.
+Guard the raise so it is skipped on Emscripten, wrap the pure-Python
+inference-collection import with contextlib.suppress so that its
+top-level import of _pybind_state does not abort the whole import,
+and provide an InferenceSession shim backed by onnxruntime-web loaded
+from CDN via the Pyodide JS FFI.
+---
+ __init__.py | 143 +++++++++++++++++++++++++++++++++++++++++++++++++---
+ 1 file changed, 135 insertions(+), 8 deletions(-)
+
+diff --git a/__init__.py b/__init__.py
+index b17e980..0000000 100644
+--- a/__init__.py
++++ b/__init__.py
 @@ -11,0 +12 @@ import contextlib
 +import sys
-@@ -79,0 +81 @@ if import_capi_exception:
-+with contextlib.suppress(ImportError):
-@@ -82 +83,0 @@ from onnxruntime.capi.onnxruntime_inference_collection import (
+@@ -77,2 +78,2 @@ import_capi_exception = None
+-if import_capi_exception:
+-    raise import_capi_exception
++if import_capi_exception and sys.platform != "emscripten":
++    raise import_capi_exception
+@@ -80,10 +81,11 @@ if import_capi_exception and sys.platform != "emscripten":
+-from onnxruntime.capi.onnxruntime_inference_collection import (
+-    AdapterFormat,  # noqa: F401
 -    InferenceSession,  # noqa: F401
-@@ -97,0 +99,132 @@ except ImportError:
-+
-+
-+# Pyodide shim: bridge onnxruntime-web via the JavaScript FFI.
-+# This runs when the native C extension cannot be loaded, which is the case
-+# in Pyodide (Emscripten/WebAssembly). The onnxruntime-web JavaScript
-+# library is loaded from a CDN to provide the InferenceSession API.
-+import js as _js  # noqa: PLC0415
-+import numpy as _np  # noqa: PLC0415
-+from pyodide.ffi import run_sync as _run_sync, to_js as _to_js  # noqa: PLC0415
-+
-+_ORT_VERSION = "1.24.2"
-+_ORT_CDN_BASE = f"https://cdn.jsdelivr.net/npm/onnxruntime-web@{_ORT_VERSION}/dist"
-+
-+# Load onnxruntime-web from CDN.
-+# importScripts() is synchronous and available in Web Workers (the typical
-+# Pyodide deployment context, e.g. JupyterLite).
-+if hasattr(_js, "importScripts"):
-+    _js.importScripts(f"{_ORT_CDN_BASE}/ort.min.js")
-+else:
-+    raise ImportError(
-+        "onnxruntime requires a web worker context (importScripts) when "
-+        "running in Pyodide. Ensure you are running in JupyterLite or a "
-+        "similar web worker environment."
+-    IOBinding,  # noqa: F401
+-    ModelCompiler,  # noqa: F401
+-    OrtDevice,  # noqa: F401
+-    OrtValue,  # noqa: F401
+-    SparseTensor,  # noqa: F401
+-    copy_tensors,  # noqa: F401
+-)
++with contextlib.suppress(ImportError):
++    from onnxruntime.capi.onnxruntime_inference_collection import (
++        AdapterFormat,  # noqa: F401
++        InferenceSession,  # noqa: F401
++        IOBinding,  # noqa: F401
++        ModelCompiler,  # noqa: F401
++        OrtDevice,  # noqa: F401
++        OrtValue,  # noqa: F401
++        SparseTensor,  # noqa: F401
++        copy_tensors,  # noqa: F401
 +    )
+@@ -418,0 +420,132 @@
 +
-+_js.ort.env.wasm.wasmPaths = f"{_ORT_CDN_BASE}/"
++if import_capi_exception:
 +
-+_NUMPY_DTYPE_TO_ORT_TYPE = {
-+    "float16": "float16",
-+    "float32": "float32",
-+    "float64": "double",
-+    "int8": "int8",
-+    "int16": "int16",
-+    "int32": "int32",
-+    "int64": "int64",
-+    "uint8": "uint8",
-+    "uint16": "uint16",
-+    "uint32": "uint32",
-+    "uint64": "uint64",
-+    "bool": "bool",
-+}
++    # Pyodide shim: bridge onnxruntime-web via the JavaScript FFI.
++    # This runs when the native C extension cannot be loaded, which is the case
++    # in Pyodide (Emscripten/WebAssembly). The onnxruntime-web JavaScript
++    # library is loaded from a CDN to provide the InferenceSession API.
++    import js as _js  # noqa: PLC0415
++    import numpy as _np  # noqa: PLC0415
++    from pyodide.ffi import run_sync as _run_sync, to_js as _to_js  # noqa: PLC0415
 +
-+def _numpy_to_ort_tensor(array):
-+    array = _np.ascontiguousarray(array)
-+    ort_type = _NUMPY_DTYPE_TO_ORT_TYPE.get(array.dtype.name)
-+    if ort_type is None:
-+        raise TypeError(f"Unsupported numpy dtype for onnxruntime: {array.dtype}")
-+    # to_js converts a numpy array to the corresponding JS TypedArray
-+    # (e.g. float32 -> Float32Array, int32 -> Int32Array).
-+    flat = _to_js(array.ravel(), create_pyproxies=False)
-+    dims = _to_js(list(array.shape))
-+    return _js.ort.Tensor.new(ort_type, flat, dims)
++    _ORT_VERSION = "1.24.2"
++    _ORT_CDN_BASE = f"https://cdn.jsdelivr.net/npm/onnxruntime-web@{_ORT_VERSION}/dist"
 +
-+def _ort_tensor_to_numpy(tensor):
-+    data = _np.array(tensor.data.to_py())
-+    dims = [int(d) for d in tensor.dims.to_py()]
-+    return data.reshape(dims)
++    # Load onnxruntime-web from CDN.
++    # importScripts() is synchronous and available in Web Workers (the typical
++    # Pyodide deployment context, e.g. JupyterLite).
++    if hasattr(_js, "importScripts"):
++        _js.importScripts(f"{_ORT_CDN_BASE}/ort.min.js")
++    else:
++        raise ImportError(
++            "onnxruntime requires a web worker context (importScripts) when "
++            "running in Pyodide. Ensure you are running in JupyterLite or a "
++            "similar web worker environment."
++        )
 +
-+class NodeArg:
-+    """Represents model input/output metadata (name, type, shape)."""
++    _js.ort.env.wasm.wasmPaths = f"{_ORT_CDN_BASE}/"
 +
-+    def __init__(self, name, type_, shape):
-+        self._name = name
-+        self._type = type_
-+        self._shape = shape
++    _NUMPY_DTYPE_TO_ORT_TYPE = {
++        "float16": "float16",
++        "float32": "float32",
++        "float64": "double",
++        "int8": "int8",
++        "int16": "int16",
++        "int32": "int32",
++        "int64": "int64",
++        "uint8": "uint8",
++        "uint16": "uint16",
++        "uint32": "uint32",
++        "uint64": "uint64",
++        "bool": "bool",
++    }
 +
-+    @property
-+    def name(self):
-+        return self._name
++    def _numpy_to_ort_tensor(array):
++        array = _np.ascontiguousarray(array)
++        ort_type = _NUMPY_DTYPE_TO_ORT_TYPE.get(array.dtype.name)
++        if ort_type is None:
++            raise TypeError(f"Unsupported numpy dtype for onnxruntime: {array.dtype}")
++        # to_js converts a numpy array to the corresponding JS TypedArray
++        # (e.g. float32 -> Float32Array, int32 -> Int32Array).
++        flat = _to_js(array.ravel(), create_pyproxies=False)
++        dims = _to_js(list(array.shape))
++        return _js.ort.Tensor.new(ort_type, flat, dims)
 +
-+    @property
-+    def type(self):
-+        return self._type
++    def _ort_tensor_to_numpy(tensor):
++        data = _np.array(tensor.data.to_py())
++        dims = [int(d) for d in tensor.dims.to_py()]
++        return data.reshape(dims)
 +
-+    @property
-+    def shape(self):
-+        return self._shape
++    class NodeArg:
++        """Represents model input/output metadata (name, type, shape)."""
 +
-+    def __repr__(self):
-+        return f"NodeArg(name={self._name!r}, type={self._type!r}, shape={self._shape})"
++        def __init__(self, name, type_, shape):
++            self._name = name
++            self._type = type_
++            self._shape = shape
 +
-+class InferenceSession:
-+    """ONNX Runtime InferenceSession backed by onnxruntime-web via Pyodide."""
++        @property
++        def name(self):
++            return self._name
 +
-+    def __init__(
-+        self,
-+        path_or_bytes,
-+        sess_options=None,
-+        providers=None,
-+        provider_options=None,
-+        **kwargs,
-+    ):
-+        import os as _os  # noqa: PLC0415
++        @property
++        def type(self):
++            return self._type
 +
-+        if isinstance(path_or_bytes, (str, _os.PathLike)):
-+            model_input = str(path_or_bytes)
-+        elif isinstance(path_or_bytes, bytes):
-+            model_input = _to_js(path_or_bytes, create_pyproxies=False)
-+        else:
-+            raise TypeError(f"Unsupported model input type: {type(path_or_bytes)}")
++        @property
++        def shape(self):
++            return self._shape
 +
-+        self._session = _run_sync(_js.ort.InferenceSession.create(model_input))
++        def __repr__(self):
++            return f"NodeArg(name={self._name!r}, type={self._type!r}, shape={self._shape})"
 +
-+    def run(self, output_names, input_feed, run_options=None):
-+        js_feeds = _js.Object.new()
-+        for name, value in input_feed.items():
-+            setattr(js_feeds, name, _numpy_to_ort_tensor(_np.asarray(value)))
++    class InferenceSession:
++        """ONNX Runtime InferenceSession backed by onnxruntime-web via Pyodide."""
 +
-+        if output_names is not None:
-+            js_fetches = _js.Object.new()
-+            for name in output_names:
-+                setattr(js_fetches, name, None)
-+            js_results = _run_sync(self._session.run(js_feeds, js_fetches))
-+        else:
-+            js_results = _run_sync(self._session.run(js_feeds))
-+            output_names = [str(n) for n in self._session.outputNames]
++        def __init__(
++            self,
++            path_or_bytes,
++            sess_options=None,
++            providers=None,
++            provider_options=None,
++            **kwargs,
++        ):
++            import os as _os  # noqa: PLC0415
 +
-+        return [_ort_tensor_to_numpy(js_results[name]) for name in output_names]
++            if isinstance(path_or_bytes, (str, _os.PathLike)):
++                model_input = str(path_or_bytes)
++            elif isinstance(path_or_bytes, bytes):
++                model_input = _to_js(path_or_bytes, create_pyproxies=False)
++            else:
++                raise TypeError(f"Unsupported model input type: {type(path_or_bytes)}")
 +
-+    def get_inputs(self):
-+        return [NodeArg(str(n), None, None) for n in self._session.inputNames]
++            self._session = _run_sync(_js.ort.InferenceSession.create(model_input))
 +
-+    def get_outputs(self):
-+        return [NodeArg(str(n), None, None) for n in self._session.outputNames]
++        def run(self, output_names, input_feed, run_options=None):
++            js_feeds = _js.Object.new()
++            for name, value in input_feed.items():
++                setattr(js_feeds, name, _numpy_to_ort_tensor(_np.asarray(value)))
 +
-+    def get_providers(self):
-+        return ["WebAssemblyExecutionProvider"]
++            if output_names is not None:
++                js_fetches = _js.Object.new()
++                for name in output_names:
++                    setattr(js_fetches, name, None)
++                js_results = _run_sync(self._session.run(js_feeds, js_fetches))
++            else:
++                js_results = _run_sync(self._session.run(js_feeds))
++                output_names = [str(n) for n in self._session.outputNames]
 +
-+    def get_session_options(self):
-+        return None
++            return [_ort_tensor_to_numpy(js_results[name]) for name in output_names]
 +
++        def get_inputs(self):
++            return [NodeArg(str(n), None, None) for n in self._session.inputNames]
 +
++        def get_outputs(self):
++            return [NodeArg(str(n), None, None) for n in self._session.outputNames]
++
++        def get_providers(self):
++            return ["WebAssemblyExecutionProvider"]
++
++        def get_session_options(self):
++            return None
++
+--
+2.34.1

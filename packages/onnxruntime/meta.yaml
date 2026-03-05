@@ -1,0 +1,23 @@
+package:
+  name: onnxruntime
+  version: 1.25.0
+  top-level:
+    - onnxruntime
+
+source:
+  url: https://bartbroere.eu/downloads/onnxruntime-1.25.0-cp313-cp313-pyodide_2025_0_wasm32.whl
+  sha256: 20dec823a29c9870ab72064fd2c52aa2d5dcc10dbfc0d7454fef019d97fb1035
+
+test:
+  imports:
+    - onnxruntime
+
+about:
+  home: https://onnxruntime.ai
+  PyPI: https://pypi.org/project/onnxruntime
+  summary: ONNX Runtime is a cross-platform inference and training machine-learning accelerator
+  license: MIT
+
+extra:
+  recipe-maintainers:
+    - bartbroere

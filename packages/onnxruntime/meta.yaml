@@ -40,6 +40,14 @@ build:
     # Python build-time dependencies needed by onnxruntime's build.py and setup.py.
     pip install flatbuffers packaging
 
+    # Determine the pyodide version that is already installed in this build
+    # environment. Passing this version to onnxruntime's build.py prevents it
+    # from attempting to run `pyodide xbuildenv install <version>`, which would
+    # fail in the pyodide-recipes CI because auditwheel_emscripten imports
+    # wheel.cli.pack — a module removed in wheel ≥ 0.44.
+    PYODIDE_VERSION=$(python3 -c "from pyodide_build.build_env import xbuildenv_dirname; from pyodide_build.xbuildenv import CrossBuildEnvManager; print(CrossBuildEnvManager(xbuildenv_dirname()).current_version)")
+    echo "Using installed Pyodide xbuildenv version: ${PYODIDE_VERSION}"
+
     # Run onnxruntime's Pyodide-specific build using the dedicated build script
     # added in the fork. Internally this:
     #   1. Configures CMake with pyodide-build's Emscripten toolchain
@@ -52,7 +60,7 @@ build:
     # and are the defaults used in the fork's own CI workflow.
     python3 tools/ci_build/build.py \
       --build_pyodide_wheel \
-      --pyodide_version 0.28.0 \
+      --pyodide_version "${PYODIDE_VERSION}" \
       --build_dir ./build_pyodide \
       --config Release \
       --update \

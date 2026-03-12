@@ -30,7 +30,11 @@ build:
     git init .
     git remote add origin https://github.com/bartbroere/onnxruntime.git
     git fetch --depth=1 origin feature/pyodide-wasm32-wheel
-    git checkout -q FETCH_HEAD
+    # -f is required: the tarball was already extracted into this directory,
+    # so git would otherwise refuse to overwrite those untracked files.
+    # The fork's patched files (Pyodide-specific changes) replace the
+    # microsoft/onnxruntime files that came from the source tarball.
+    git checkout -f FETCH_HEAD
     git submodule update --init --recursive --depth=1
 
     # Python build-time dependencies needed by onnxruntime's build.py and setup.py.

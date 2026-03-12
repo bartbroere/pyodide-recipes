@@ -40,22 +40,20 @@ build:
     # Python build-time dependencies needed by onnxruntime's build.py and setup.py.
     pip install flatbuffers packaging
 
-    # onnxruntime's build.py unconditionally runs:
-    #   pip install pyodide-build==<version>
-    #   pyodide xbuildenv install <version>
-    # Both steps fail in the pyodide-recipes CI:
-    #   - The installed pyodide-build is a nightly with no corresponding
-    #     xbuildenv release entry in the release index.
-    #   - auditwheel_emscripten imports wheel.cli.pack, removed in wheel ≥ 0.44.
-    # The xbuildenv is already set up by the pyodide-recipes CI environment,
-    # so delete that block from build.py and rely on what is already installed.
-    PATCH_START=$(grep -n 'log.info("Installing pyodide-build' tools/ci_build/build.py | head -1 | cut -d: -f1)
-    PATCH_END=$(grep -n '"xbuildenv", "install", args.pyodide_version' tools/ci_build/build.py | head -1 | cut -d: -f1)
-    if [ -z "${PATCH_START}" ] || [ -z "${PATCH_END}" ]; then
-      echo "ERROR: pyodide patch anchor not found in tools/ci_build/build.py" >&2
+    # onnxruntime's build.py unconditionally runs `pyodide xbuildenv install <version>`.
+    # This fails because the installed pyodide-build is a nightly (e.g. 0.33.0) with no
+    # entry in the xbuildenv release index. The xbuildenv is already set up by the CI
+    # environment, so delete only that one line from build.py.
+    if ! grep -q '"xbuildenv", "install", args.pyodide_version' tools/ci_build/build.py; then
+      echo "ERROR: xbuildenv install anchor not found in tools/ci_build/build.py" >&2
       exit 1
     fi
-    sed -i "${PATCH_START},${PATCH_END}d" tools/ci_build/build.py
+    sed -i '/"xbuildenv", "install", args.pyodide_version/d' tools/ci_build/build.py
+
+    # Pass the already-installed pyodide-build version so that build.py's
+    # `pip install pyodide-build==<version>` is a no-op (same version already present).
+    PYODIDE_VERSION=$(pip show pyodide-build | grep ^Version | awk '{print $2}')
+    echo "Using installed pyodide-build version: ${PYODIDE_VERSION}"
 
     # Run onnxruntime's Pyodide-specific build using the dedicated build script
     # added in the fork. Internally this:
@@ -69,6 +67,7 @@ build:
     # and are the defaults used in the fork's own CI workflow.
     python3 tools/ci_build/build.py \
       --build_pyodide_wheel \
+      --pyodide_version "${PYODIDE_VERSION}" \
       --build_dir ./build_pyodide \
       --config Release \
       --update \

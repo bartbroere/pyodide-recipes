@@ -45,8 +45,8 @@ build:
     # from attempting to run `pyodide xbuildenv install <version>`, which would
     # fail in the pyodide-recipes CI because auditwheel_emscripten imports
     # wheel.cli.pack — a module removed in wheel ≥ 0.44.
-    PYODIDE_VERSION=$(pyodide xbuildenv version)
-    echo "Using installed Pyodide xbuildenv version: ${PYODIDE_VERSION}"
+    PYODIDE_VERSION=$(pip show pyodide-build | grep ^Version | awk '{print $2}')
+    echo "Using installed pyodide-build version: ${PYODIDE_VERSION}"
 
     # Run onnxruntime's Pyodide-specific build using the dedicated build script
     # added in the fork. Internally this:

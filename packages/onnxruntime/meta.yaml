@@ -1,0 +1,93 @@
+package:
+  name: onnxruntime
+  version: 1.25.0
+  top-level:
+    - onnxruntime
+
+# See https://github.com/microsoft/onnxruntime/tree/d592ad141b57b3ae4b78819357e8d56ce7fb6c90
+# for the Pyodide-specific changes on top of microsoft/onnxruntime 1.25.0.
+source:
+  url: https://github.com/microsoft/onnxruntime/archive/d592ad141b57b3ae4b78819357e8d56ce7fb6c90.tar.gz
+  sha256: f2b029f194e8f94d89f4a0fc1bf5747d06a36017becf2f0ad38007565a5b1f09
+
+build:
+  exports: pyinit
+  # -fwasm-exceptions: use native WASM exceptions (Emscripten 4.0.9 / Pyodide 0.28+
+  #   switched from JS-based to native WASM exception handling)
+  # -DSTANDALONE_WASM: makes absl::symbolize use a no-op stub for HaveOffsetConverter
+  #   instead of emitting an EM_JS() global that Pyodide's dynamic linker cannot
+  #   register under Content-Security-Policy (no 'new Function()' eval).
+  cflags: -fwasm-exceptions -DSTANDALONE_WASM
+  cxxflags: -fwasm-exceptions -DSTANDALONE_WASM
+  ldflags: -fwasm-exceptions
+  script: |
+    set -e -x
+
+    # The GitHub archive tarball does not include git submodule contents.
+    # onnxruntime's CMake build requires numerous submodules (onnx, flatbuffers,
+    # abseil-cpp, protobuf, cpuinfo, nlohmann_json, re2, GSL, …).
+    # Re-initialize as a git repository and fetch all submodules at depth=1.
+    git init .
+    git remote add origin https://github.com/bartbroere/onnxruntime.git
+    git fetch --depth=1 origin feature/pyodide-wasm32-wheel
+    git checkout -q FETCH_HEAD
+    git submodule update --init --recursive --depth=1
+
+    # Python build-time dependencies needed by onnxruntime's build.py and setup.py.
+    pip install flatbuffers packaging
+
+    # Run onnxruntime's Pyodide-specific build using the dedicated build script
+    # added in the fork. Internally this:
+    #   1. Configures CMake with pyodide-build's Emscripten toolchain
+    #      (-DONNXRUNTIME_BUILD_FOR_PYODIDE=ON, -sSIDE_MODULE=2, -fwasm-exceptions, …)
+    #   2. Compiles onnxruntime_pybind11_state as a wasm32 SIDE_MODULE
+    #   3. Calls `setup.py bdist_wheel --use_pyodide` to produce a wheel with
+    #      the correct platform tag (cp313-cp313-pyodide_2025_0_wasm32)
+    #
+    # --disable_ml_ops and --disable_contrib_ops reduce binary size significantly
+    # and are the defaults used in the fork's own CI workflow.
+    python3 tools/ci_build/build.py \
+      --build_pyodide_wheel \
+      --pyodide_version 0.28.0 \
+      --build_dir ./build_pyodide \
+      --config Release \
+      --update \
+      --build \
+      --parallel \
+      --skip_submodule_sync \
+      --skip_tests \
+      --disable_ml_ops \
+      --disable_contrib_ops
+
+    # Locate the produced wheel and extract its contents.
+    WHEEL=$(ls ./build_pyodide/Release/dist/*.whl | head -1)
+    python3 -m zipfile -e "$WHEEL" ./wheel_extract
+
+    # Copy the Python package tree from the wheel into the source root so that
+    # pyodide-build can collect it during the packaging step.
+    cp -r ./wheel_extract/onnxruntime ./onnxruntime_dist
+
+    # Copy the compiled wasm32 SIDE_MODULE (.so) into the Python package directory
+    # so it is found alongside the Python wrapper code.
+    find ./wheel_extract -name "onnxruntime_pybind11_state*.so" -exec \
+      cp {} ./onnxruntime_dist/capi/ \;
+
+requirements:
+  host:
+    - numpy
+  run:
+    - numpy
+
+test:
+  imports:
+    - onnxruntime
+
+about:
+  home: https://github.com/microsoft/onnxruntime
+  PyPI: https://pypi.org/project/onnxruntime
+  summary: ONNX Runtime — cross-platform ML inference accelerator (Pyodide wasm32-emscripten build)
+  license: MIT
+
+extra:
+  recipe-maintainers:
+    - bartbroere
